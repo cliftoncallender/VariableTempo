@@ -14,6 +14,7 @@ class VariableTempoBase:
 
     Base class contains a `graph` method to be inherited by its subclasses,
     `VariableTempo` and `VariableTempoBPF`.
+
     """
 
     def graph(self, title=None):
@@ -194,6 +195,7 @@ class VariableTempo(VariableTempoBase):
             ...                       end_tempo=120, length=1)
             >>> curve.time_to_beat(0.5)
             37.5
+
         """
         if self.curve_type is 'constant':
             return self._constant_t2b(t)
@@ -218,9 +220,7 @@ class VariableTempo(VariableTempoBase):
         return (a * L / math.log(r)) * (r**(t / L) - 1)
 
     def _expression_t2b(self, t):
-        """Return the result of numerical integration with
-        `scipy.integrate.quad`.
-        """
+        """Return the result of integration with `scipy.integrate.quad`."""
         f = lambda t: eval(self.expr)
         return scipy.integrate.quad(f, 0, t)[0]
 
@@ -236,6 +236,7 @@ class VariableTempo(VariableTempoBase):
             ...                       end_tempo=120, length=1)
             >>> curve.beat_time_tempo(37.5)
             0.5
+
         """
         if self.curve_type is 'constant':
             return self._constant_b2t(beat)
@@ -310,6 +311,7 @@ class VariableTempoBPF(VariableTempoBase):
 
     Class contains methods for converting between time and beats, as well as
     getting the instantaneous tempo at a given time.
+
     """
 
     def __init__(self):
@@ -425,6 +427,7 @@ def transform_stream(original_stream, tempo_function):
 
     `tempo_function` can be either a `VariableTempo` or `VariableTempoBPF`
     object.
+
     """
     new_stream = m21.stream.Stream()
     # Insert MM = 60 so that offsets can be interpreted as seconds.
