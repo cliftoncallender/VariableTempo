@@ -472,7 +472,8 @@ def main():
     # bpf.graph()
 
     # Parse theme, add tempo marking and show.
-    theme = m21.converter.parse('theme.xml')
+    themeURL = 'http://cliftoncallender.com/resources/theme.xml'
+    theme = m21. converter.parse(themeURL)
     theme.insert(0, m21.tempo.MetronomeMark(number=60))
     theme.show()
 
