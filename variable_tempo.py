@@ -334,12 +334,16 @@ class VariableTempoBPF(VariableTempo):
 
     """
 
-    def __init__(self):
+    def __init__(self, segments=[]):
         """Create an empty list to be filled via `add_segment`."""
         self.segments = []
         self._length = 0
 
-    def add_segment(self, tempo_function, segment_length=None):
+        # Add segments to self.segments
+        for segment in segments:
+            self.append(segment)
+
+    def append(self, tempo_function, segment_length=None):
         """Append a new tempo function to the break-point function.
 
         `tempo_function` is a `VariableTempo` object.
@@ -357,15 +361,16 @@ class VariableTempoBPF(VariableTempo):
             six beats, and an exponential acceleration from 60 to 120 bpm over
             six beats:
 
-                >>> vtfs = [VariableTempo('constant', start_tempo=120,
-                ...                       num_beats=6),
-                ...         VariableTempo('linear', start_tempo=120,
-                ...                       end_tempo=60, num_beats=6),
-                ...         VariableTempo('exponential', start_tempo=60,
-                ...                       end_tempo=120, num_beats=6)]
+                >>> vtfs = [ConstantVariableTempo(start_tempo=120,
+                ...                               num_beats=6),
+                ...         LinearVariableTempo(start_tempo=120,
+                ...                             end_tempo=60, num_beats=6),
+                ...         ExponentialVariableTempo(start_tempo=60,
+                ...                                  end_tempo=120,
+                ...                                  num_beats=6)]
                 >>> bpf = VariableTempoBPF()
                 >>> for vtf in vtfs:
-                ...     bpf.add_segment(vtf)
+                ...     bpf.append(vtf)
 
         """
         if len(self.segments) == 0:
@@ -425,17 +430,16 @@ class VariableTempoBPF(VariableTempo):
                                                           segment.start_time)
 
     def __repr__(self):
-        string = "Break-point function with segments:\n\n"
-        for i, seg in enumerate(self.segments):
-            string += "Segment {} ".format(i + 1)
-            string += "start_time={} (start_beat={}), " \
-                      .format(round(seg.start_time * 60, 3),
-                              seg.start_beat)
-            string += "end_time={} (end_beat={})\n" \
-                      .format(round(seg.end_time * 60, 3),
-                              seg.end_beat)
-            string += "{}\n\n".format(seg.tempo_function)
-        return string
+        name = self.__class__.__name__
+        segments = ", ".join(segment.tempo_function.__repr__()
+                             for segment in self.segments)
+        return f"{name}([{segments}])"
+
+    def __str__(self):
+        prefix = "Break-point function with segments\n"
+        description = ("".join(f"Segment {i + 1}:\n{seg}\n\n"
+                               for i, seg in enumerate(self.segments)))
+        return prefix + description
 
 
 def transform_stream(original_stream, tempo_function):
@@ -483,21 +487,21 @@ def main():
 
     # EXAMPLE 2: Construct a variable-tempo canon.
     # Create variable tempo function
-    tempo_curve = ExponentialVariableTempo(start_tempo=60, end_tempo=120, num_beats=6)
-    print(tempo_curve)
+    tempo_curve = ExponentialVariableTempo(start_tempo=60, end_tempo=120,
+                                           num_beats=6)
+    print(tempo_curve, "\n")
 
     # Create variable tempo break-point function
     # and add three copies of tempo_curve.
-    bpf = VariableTempoBPF()
-    for _ in range(4):
-        bpf.add_segment(tempo_curve)
+    bpf = VariableTempoBPF([tempo_curve for _ in range(4)])
+    print(bpf)
     bpf.graph()
 
     # Parse theme, add tempo marking and show.
     themeURL = 'http://cliftoncallender.com/resources/theme.xml'
     theme = m21.converter.parse(themeURL)
     theme.insert(0, m21.tempo.MetronomeMark(number=60))
-    theme.show()
+    # theme.show()
 
     # Transform theme by tempo function.
     transformed_theme = transform_stream(theme, bpf)
