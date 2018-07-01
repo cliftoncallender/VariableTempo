@@ -4,18 +4,89 @@ import music21 as m21
 import scipy.integrate
 import numpy as np
 import matplotlib.pyplot as plt
+from abc import ABC, abstractmethod
 import math
 from collections import namedtuple
 import copy
 
 
-class VariableTempoBase:
-    """Base class for continuously variable tempos.
+class VariableTempo(ABC):
+    """Abstract base class for handling continuously variable tempos.
 
-    Base class contains a `graph` method to be inherited by its subclasses,
-    `VariableTempo` and `VariableTempoBPF`.
+    Class contains abstract methods for converting between time and beats, as
+    well as methods for getting the instantaneous tempo at a given time and
+    graphing the tempo function.
+
+    Attributes:
+        start_tempo (float): Initial tempo for the variable tempo function.
+            Defaults to `None`. `start_tempo` is assumed to be in beats per
+            minute and is required for `ConstantVariableTempo`,
+            `LinearVariableTempo`, and `ExponentialVariableTempo` subclasses.
+
+        end_tempo (float): Ending tempo for the variable tempo function.
+            Defaults to `None`. `end_tempo` is assumed to be in beats per
+            minute and is a required attribute for `LinearVariableTempo` and
+            `ExponentialVariableTempo` subclasses.
+
+        length (float): Length of time (in minutes) from `start_tempo` to
+            `end_tempo`. Defaults to `None`. `LinearVariableTempo` and
+            `ExponentialVariableTempo` subclasses require a value for either
+            `length` or `num_beats` (see below). If a value for `length` is
+            not provided, it is derived from `num_beats`.
+
+        num_beats (float): Number of beats occuring between `start_tempo` and
+            `end_tempo`. Defaults to `None`. `LinearVariableTempo` and
+            `ExponentialVariableTempo` subclasses require a value for either
+            `num_beats` or `length` (see above). If a value for `num_beats` is
+            not provided, it is derived from `length`.
+
+        expr (str): `expr` must be a string that gives rise to a valid
+            mathematical expression of the single variable 't' when evaluated
+            by the `eval` function. `expr` is required by the
+            `ExpressionVariableTempo` subclass. For the other subclasses,
+            `expr` is derived.
 
     """
+
+    def __init__(self, start_tempo=None, end_tempo=None,
+                 length=None, num_beats=None, expr=None):
+        self.start_tempo = start_tempo
+        self.end_tempo = end_tempo
+        self.length = length
+        self.num_beats = num_beats
+        self.expr = expr
+
+    @abstractmethod
+    def time_to_beat(self, t):
+        """Given a time in minutes, returns the corresponding beat.
+
+        The beat is the definite integral of the tempo function from 0 to `t`.
+
+        Example:
+            >>> vtf = LinearVariableTempo(start_tempo=60, end_tempo=120,
+            ...                           length=1)
+            >>> vtf.time_to_beat(0.5)
+            37.5
+
+        """
+        pass
+
+    @abstractmethod
+    def beat_to_time(self, b):
+        """Given a beat, returns the corresponding time in minutes.
+
+        Inverse function of .time_to_beat. The corresponding time is determined
+        by setting the definite integral of f(t) from 0 to t_0 = b and solving
+        for t_0.
+
+        Example:
+            >>> vtf = LinearVariableTempo(start_tempo=60, end_tempo=120,
+            ...                           length=1)
+            >>> vtf.beat_time_tempo(37.5)
+            0.5
+
+        """
+        pass
 
     def graph(self, title=None):
         """Graph tempo function using maplotlib.pyplot."""
@@ -31,97 +102,37 @@ class VariableTempoBase:
             plt.title(title)
         plt.show()
 
+    def instantaneous_tempo(self, t):
+        """Return instantaneous tempo at time t."""
+        return eval(self.expr)
 
-class VariableTempo(VariableTempoBase):
-    """Class for handling continuously variable tempos.
+    def __repr__(self):
+        arg_names = ["start_tempo", "end_tempo",
+                     "length", "num_beats", "expr"]
+        name = self.__class__.__name__
+        attr = ", ".join("{}={!r}".format(k, v)
+                         for k, v in self.__dict__.items()
+                         if k in arg_names and v is not None)
+        return "{}({})".format(name, attr)
 
-    Class contains methods for converting between time and beats, as well as
-    getting the instantaneous tempo at a given time.
+    def __str__(self):
+        return "{}: f(t) = {}".format(self.__class__.__name__, self.expr)
 
-    Attributes:
-        curve_type (str): `curve_type` can be 'constant', 'linear',
-            'exponential', or 'expression'
 
-        start_tempo (float): Initial tempo for the variable tempo function.
-            Defaults to `None`. `start_tempo` is assumed to be in beats per
-            minute and is required for 'constant', 'linear', and 'exponential'
-            tempo functions.
+class ConstantVariableTempo(VariableTempo):
+    """Subclass for constant variable tempo functions.
 
-        end_tempo (float): Ending tempo for the variable tempo function.
-            Defaults to `None`. `end_tempo` is assumed to be in beats per
-            minute and is required attribute for 'linear' and 'exponential'
-            tempo functions.
-
-        length (float): Length of time (in minutes) from `start_tempo` to
-            `end_tempo`. Defaults to `None`. 'linear' and 'exponential' tempo
-            functions require a value for either `length` or `num_beats` (see
-            below). If a value for `length` is not provided, it is derived
-            from `num_beats`.
-
-        num_beats (float): Number of beats occuring between `start_tempo` and
-            `end_tempo`. Defaults to `None`. 'linear' and 'exponential' tempo
-            functions require a value for either `num_beats` or `length` (see
-            above). If a value for `num_beats` is not provided, it is derived
-            from `length`.
-
-        expr (str): `expr` must be a string that gives rise to a valid
-            mathematical expression of the single variable 't' when evaluated
-            by the `eval` function. Tempo functions defined by expressions
-            depend on the `quad` function in `scipy.integrate`.
-
-    Examples:
+    Example:
         Create a `VariableTempo` object for a constant tempo of 60 beats per
         minute--f(t) = 60:
 
-            >>> curve = VariableTempo('constant', start_tempo=60)
-
-
-        Create a `VariableTempo` object for a linear acceleration from 60 bpm
-        to 120 bpm over 0.5 minutes--f(t) = 60 * 2 * t + 60:
-
-            >>> curve = VariableTempo('linear', start_tempo=60,
-            ...                       end_tempo=120, length=0.5)
-
-
-        Create a `VariableTempo` object for an exponential acceleration from 60
-        bpm to 120 bpm over 2 minutes--f(t) = 60 + (120/60)^(t/2):
-
-            >>> curve = VariableTempo('exponential', start_tempo=60,
-            ...                       end_tempo=120, length=2)
-
-
-        Create a `VariableTempo` object for a tempo of the form
-        f(t) = 60t^2 + 60:
-
-            >>> curve = VariableTempo('expression', expr='60 * t**2 + 60')
+            >>> curve = ConstantVariableTempo(start_tempo=60)
 
     """
 
-    def __init__(self, curve_type, start_tempo=None, end_tempo=None,
-                 length=None, num_beats=None, expr=None):
-        """Initialize object depending on curve_type."""
-        self.curve_type = curve_type
-        self.start_tempo = start_tempo
-        self.end_tempo = end_tempo
-        self.length = length
-        self.num_beats = num_beats
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
-        # Initialize based on curve_type.
-        if curve_type is 'constant':
-            self._constant_init()
-        elif curve_type is 'linear':
-            self._linear_init()
-        elif curve_type is 'exponential':
-            self._exponential_init()
-        elif curve_type is 'expression':
-            self._expression_init(expr)
-        # Otherwise, curve_type is invalid.
-        else:
-            curve_types = ['constant', 'linear', 'exponential', 'expression']
-            raise Exception("curve_type must be " +
-                            ', '.join(item for item in curve_types) + '.')
-
-    def _constant_init(self):
         # Set expr.
         self.expr = "{}".format(self.start_tempo)
 
@@ -129,9 +140,51 @@ class VariableTempo(VariableTempoBase):
         if self.num_beats:
             self.length = self.num_beats / self.start_tempo
 
-    def _linear_init(self):
-        # Check that length or num_beats is not None.
-        self._check_length_or_num_beats()
+    def time_to_beat(self, t):
+        return self.start_tempo * t
+
+    def beat_to_time(self, beat):
+        return beat / self.start_tempo
+
+    def __str__(self):
+        prefix = super().__str__()
+        return "{}\nTempo is {}bpm.".format(prefix, self.start_tempo)
+
+
+# Shared methods for LinearVariableTempo and ExponentialVariableTempo classes
+class _LinearAndExponentialVariableTempos(VariableTempo):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Check that 'linear' and 'exponential' functions have a value other
+        # than None for either length or num_beats
+        if not (self.length or self.num_beats):
+            raise ValueError("LinearVariableTempo and ExponentialVariableTempo"
+                             "classes require a value for either length or "
+                             "num_beats.")
+
+    def __str__(self):
+        prefix = super().__str__()
+        suffix = ("\nTempo is {}bpm to {}bpm over {} seconds ({} beats)."
+                  .format(self.start_tempo, self.end_tempo,
+                          round(self.length * 60, 3),
+                          round(self.num_beats, 3)))
+        return prefix + suffix
+
+
+class LinearVariableTempo(_LinearAndExponentialVariableTempos):
+    """Subclass for linear variable tempo functions.
+
+    Example:
+        Create a `VariableTempo` object for a linear acceleration from 60 bpm
+        to 120 bpm over 0.5 minutes--f(t) = 60 * 2 * t + 60:
+
+            >>> curve = LinearVariableTempo(start_tempo=60, end_tempo=120,
+            ...                             length=0.5)
+
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
         # Derive num_beats from length or length from num_beats.
         average_tempo = (self.start_tempo + self.end_tempo) / 2
@@ -145,9 +198,30 @@ class VariableTempo(VariableTempoBase):
         self.expr = self.expr = "{} * t + {}".format(self.slope,
                                                      self.start_tempo)
 
-    def _exponential_init(self):
-        # Check that length or num_beats is not None.
-        self._check_length_or_num_beats()
+    def time_to_beat(self, t):
+        return self.slope * t**2 / 2 + self.start_tempo * t
+
+    def beat_to_time(self, beat):
+        a = self.slope / 2
+        b = self.start_tempo
+        c = -beat
+        return (-b + (b**2 - 4 * a * c)**0.5) / (2 * a)
+
+
+class ExponentialVariableTempo(_LinearAndExponentialVariableTempos):
+    """Subclass for exponential variable tempo functions.
+
+    Example:
+        Create an `VariableTempo` object for an exponential acceleration from
+        60 bpm to 120 bpm over 2 minutes--f(t) = 60 + (120/60)^(t/2):
+
+            >>> curve = ExponentialVariableTempo(start_tempo=60, end_tempo=120,
+            ...                                  length=2)
+
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
         # Set ratio between end and start tempos.
         self.ratio = self.end_tempo / self.start_tempo
@@ -163,101 +237,13 @@ class VariableTempo(VariableTempoBase):
         self.expr = "{} * {}**(t / {})".format(self.start_tempo, self.ratio,
                                                self.length)
 
-    def _expression_init(self, expr):
-        # Set expression if expr is valid.
-        if expr is not None:
-            # test if expr can be evaluated by eval
-            try:
-                t = 1
-                eval(expr)
-                self.expr = expr
-            except:
-                raise ValueError("Invalid expression for expr")
-        else:
-            raise ValueError("For curve_type 'expression', expr cannot "
-                             "be None")
-
-    def _check_length_or_num_beats(self):
-        # Check that 'linear' and 'exponential' functions have a value other
-        # than None for either length or num_beats
-        if not (self.length or self.num_beats):
-            raise ValueError("'linear' and 'exponential' functions "
-                             "require a value for either length or "
-                             "num_beats.")
-
     def time_to_beat(self, t):
-        """Given a time in minutes, returns the corresponding beat.
-
-        The beat is the definite integral of the tempo function from 0 to `t`.
-
-        Example:
-            >>> curve = VariableTempo('linear', start_tempo=60,
-            ...                       end_tempo=120, length=1)
-            >>> curve.time_to_beat(0.5)
-            37.5
-
-        """
-        if self.curve_type is 'constant':
-            return self._constant_t2b(t)
-        if self.curve_type is 'linear':
-            return self._linear_t2b(t)
-        if self.curve_type is 'exponential':
-            return self._exponential_t2b(t)
-        if self.curve_type is 'expression':
-            return self._expression_t2b(t)
-
-    # helper methods for .time_to_beat
-    def _constant_t2b(self, t):
-        return self.start_tempo * t
-
-    def _linear_t2b(self, t):
-        return self.slope * t**2 / 2 + self.start_tempo * t
-
-    def _exponential_t2b(self, t):
         a = self.start_tempo
         r = self.ratio
         L = self.length
         return (a * L / math.log(r)) * (r**(t / L) - 1)
 
-    def _expression_t2b(self, t):
-        """Return the result of integration with `scipy.integrate.quad`."""
-        f = lambda t: eval(self.expr)
-        return scipy.integrate.quad(f, 0, t)[0]
-
     def beat_to_time(self, beat):
-        """Given a beat, returns the corresponding time in minutes.
-
-        Inverse function of .time_to_beat. The corresponding time is determined
-        by setting the definite integral of f(t) from 0 to t_0 = b and solving
-        for t_0.
-
-        Example:
-            >>> curve = VariableTempo('linear', start_tempo=60,
-            ...                       end_tempo=120, length=1)
-            >>> curve.beat_time_tempo(37.5)
-            0.5
-
-        """
-        if self.curve_type is 'constant':
-            return self._constant_b2t(beat)
-        if self.curve_type is 'linear':
-            return self._linear_b2t(beat)
-        if self.curve_type is 'exponential':
-            return self._exponential_b2t(beat)
-        if self.curve_type is 'expression':
-            return self._expression_b2t(beat)
-
-    # helper methods for .beat_to_time
-    def _constant_b2t(self, beat):
-        return beat / self.start_tempo
-
-    def _linear_b2t(self, beat):
-        a = self.slope / 2
-        b = self.start_tempo
-        c = -beat
-        return (-b + (b**2 - 4 * a * c)**0.5) / (2 * a)
-
-    def _exponential_b2t(self, beat):
         # Equation can yield ``ValueError: math domain error`` for beats
         # below a certain value. Need to determine exact value given a, r, L.
         a = self.start_tempo
@@ -266,7 +252,41 @@ class VariableTempo(VariableTempoBase):
         b = beat
         return L * math.log((b * math.log(r)) / (a * L) + 1, r)
 
-    def _expression_b2t(self, beat):
+
+class ExpressionVariableTempo(VariableTempo):
+    """Subclass for variable tempo functions based on a given expression.
+
+    Subclass depends on the `quad` function in `scipy.integrate`.
+
+    Example:
+        Create an `VariableTempo` object for a tempo of the form
+        f(t) = 60t^2 + 60:
+
+            >>> curve = ExpressionVTF(expr='60 * t**2 + 60')
+
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # Set expression if expr is valid.
+        if self.expr is not None:
+            # test if expr can be evaluated by eval
+            try:
+                t = 1
+                eval(self.expr)
+            except:
+                raise ValueError("Invalid expression for expr")
+        else:
+            raise ValueError("self.expr cannot be None for {}."
+                             .format(self.__class__.__name__))
+
+    def time_to_beat(self, t):
+        """Return the result of integration with `scipy.integrate.quad`."""
+        f = lambda t: eval(self.expr)
+        return scipy.integrate.quad(f, 0, t)[0]
+
+    def beat_to_time(self, beat):
         """Binary search using the inverse method."""
         max_error = 0.0001
         min_time = 0
@@ -276,11 +296,11 @@ class VariableTempo(VariableTempoBase):
         while max_beat < beat:
             min_time = max_time
             max_time += 1
-            max_beat = self._expression_t2b(max_time)
+            max_beat = self.time_to_beat(max_time)
         beat_error = 1
         while beat_error > max_error:
             mid_time = (min_time + max_time) / 2.0
-            mid_beat = self._expression_t2b(mid_time)
+            mid_beat = self.time_to_beat(mid_time)
             if mid_beat < beat:
                 min_time = mid_time
             else:
@@ -288,29 +308,13 @@ class VariableTempo(VariableTempoBase):
             beat_error = abs(mid_beat - beat)
         return mid_time
 
-    def instantaneous_tempo(self, t):
-        """Return instantaneous tempo at time t."""
-        return eval(self.expr)
 
-    def __repr__(self):
-        string = "VariableTempo object:\n"
-        string += "{} function ".format(self.curve_type)
-        if self.curve_type is 'expression':
-            string += self.expr
-        elif self.curve_type is 'constant':
-            string += "tempo = {}".format(self.start_tempo)
-        else:
-            string += ("from tempo = {} to {} over {} beats ({} seconds)"
-                       .format(self.start_tempo, self.end_tempo,
-                               self.num_beats, round(self.length * 60, 3)))
-        return string
-
-
-class VariableTempoBPF(VariableTempoBase):
+class VariableTempoBPF(VariableTempo):
     """Class combining `VariableTempo` objects into a break-point function.
 
     Class contains methods for converting between time and beats, as well as
-    getting the instantaneous tempo at a given time.
+    getting the instantaneous tempo at a given time. Inherits the `graph`
+    method from the `VariableTempo` class.
 
     """
 
@@ -370,7 +374,7 @@ class VariableTempoBPF(VariableTempoBase):
 
     @property
     def length(self):
-        """length is a read-only property."""
+        """`length` is a read-only property."""
         return self._length
 
     def time_to_beat(self, t):
@@ -447,11 +451,10 @@ def transform_stream(original_stream, tempo_function):
 
 def main():
     """Examples demonstrating the use of the variable_tempo module."""
-
     # EXAMPLE 1: Variable tempo function as a mathematical expression.
     # Create expression tempo function.
     expr = "60 * (2 * t - 1) ** 2 + 60"
-    vtf = VariableTempo('expression', expr=expr, length=1)
+    vtf = ExpressionVariableTempo(expr=expr, length=1)
     print(vtf, "\n")
 
     print("Times for the first 40 beats:")
@@ -464,15 +467,15 @@ def main():
 
     # EXAMPLE 2: Construct a variable-tempo canon.
     # Create variable tempo function
-    tempo_curve = VariableTempo('exponential',
-                                start_tempo=60, end_tempo=120, num_beats=6)
+    tempo_curve = ExponentialVariableTempo(start_tempo=60, end_tempo=120, num_beats=6)
+    print(tempo_curve)
 
     # Create variable tempo break-point function
     # and add three copies of tempo_curve.
     bpf = VariableTempoBPF()
     for _ in range(4):
         bpf.add_segment(tempo_curve)
-    # bpf.graph()
+    bpf.graph()
 
     # Parse theme, add tempo marking and show.
     themeURL = 'http://cliftoncallender.com/resources/theme.xml'
