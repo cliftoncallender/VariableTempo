@@ -122,6 +122,9 @@ class VariableTempo(ABC):
 class ConstantVariableTempo(VariableTempo):
     """Subclass for constant variable tempo functions.
 
+    Required attributes:
+        `start_tempo`
+
     Example:
         Create a `VariableTempo` object for a constant tempo of 60 beats per
         minute--f(t) = 60:
@@ -174,6 +177,11 @@ class _LinearAndExponentialVariableTempos(VariableTempo):
 class LinearVariableTempo(_LinearAndExponentialVariableTempos):
     """Subclass for linear variable tempo functions.
 
+    Required attributes:
+        `start_tempo`
+        `end_tempo`
+        `length` or `num_beats`
+
     Example:
         Create a `VariableTempo` object for a linear acceleration from 60 bpm
         to 120 bpm over 0.5 minutes--f(t) = 60 * 2 * t + 60:
@@ -210,6 +218,11 @@ class LinearVariableTempo(_LinearAndExponentialVariableTempos):
 
 class ExponentialVariableTempo(_LinearAndExponentialVariableTempos):
     """Subclass for exponential variable tempo functions.
+
+    Required attributes:
+        `start_tempo`
+        `end_tempo`
+        `length` or `num_beats`
 
     Example:
         Create an `VariableTempo` object for an exponential acceleration from
@@ -256,10 +269,13 @@ class ExponentialVariableTempo(_LinearAndExponentialVariableTempos):
 class ExpressionVariableTempo(VariableTempo):
     """Subclass for variable tempo functions based on a given expression.
 
+    Required attributes:
+        `expr`
+
     Subclass depends on the `quad` function in `scipy.integrate`.
 
     Example:
-        Create an `VariableTempo` object for a tempo of the form
+        Create a `VariableTempo` object for a tempo of the form
         f(t) = 60t^2 + 60:
 
             >>> curve = ExpressionVTF(expr='60 * t**2 + 60')
