@@ -167,11 +167,11 @@ class _LinearAndExponentialVariableTempos(VariableTempo):
 
     def __str__(self):
         prefix = super().__str__()
-        suffix = ("\nTempo is {}bpm to {}bpm over {} seconds ({} beats)."
-                  .format(self.start_tempo, self.end_tempo,
-                          round(self.length * 60, 3),
-                          round(self.num_beats, 3)))
-        return prefix + suffix
+        description = ("\nTempo is {}bpm to {}bpm over {} seconds ({} beats)."
+                       .format(self.start_tempo, self.end_tempo,
+                               round(self.length * 60, 3),
+                               round(self.num_beats, 3)))
+        return prefix + description
 
 
 class LinearVariableTempo(_LinearAndExponentialVariableTempos):
@@ -304,7 +304,7 @@ class ExpressionVariableTempo(VariableTempo):
 
     def beat_to_time(self, beat):
         """Binary search using the inverse method."""
-        max_error = 0.0001
+        max_error = 0.0001  # Fix. max_error should correspond to nearest ms.
         min_time = 0
         max_time = 0
         max_beat = 0
@@ -323,6 +323,67 @@ class ExpressionVariableTempo(VariableTempo):
                 max_time = mid_time
             beat_error = abs(mid_beat - beat)
         return mid_time
+
+
+class NancarrowGeometricAcceleration(VariableTempo):
+    """VariableTempo class for Nancarrow's geometric accleration.
+
+    Nancarrow's geometric acceleration is defined by an initial duration and
+    a consistent ratio between consecutive durations. Given an initial duration
+    (d) and ratio (r), the sequence of durations is:
+        d, d * r, d * r**2, d * r**3, ...
+
+    For example, given an initial duration of 2 seconds (d=2) and an
+    acceleration by 5% (r=1/1.05), the sequence of durations is:
+        2, 1.905, 1.814, 1.728, ...
+
+    There are a number of problems with modeling acceleration as a recursive
+    operation on duration rather than a continuous function of tempo. (See
+    Callender. 2001. “Formalized Accelerando: An Extension of Rhythmic
+    Techniques in Nancarrow’s Acceleration Canons.” Perspectives of New Music
+    39, no. 1: 188-210.)
+
+    `NancarrowGeometricAcceleration` is a subclass of
+    `ExpressionVariableTempo`. The parameters are used by the constructor
+    below to recast geometric acceleration as a continuous tempo function:
+
+                f(t) = -\frac{1 - r}{\ln(r)(d - t(1 - r))}.
+
+    Parameters:
+        initial_duration (float)
+        ratio (float)
+
+    """
+    def __init__(self, initial_duration, percent):
+        self.percent = percent
+        self.d = initial_duration / 60
+
+        # Derive ratio from percent. For example, by Nancarrow's reckoning
+        # a 5% acceleration is the ratio 1 / 1.05;
+        # a -5% acceleration is the ratio 1.05.
+        if percent > 0:
+            self.r = 1 / (1 + percent / 100)
+        else:
+            self.r = 1 + percent / 100
+
+        # f(t) = -\frac{1 - r}{\ln(r)(d - t(1 - r))}
+        expr = ("-(1 - {1}) / (math.log({1}) * ({0} - t * (1 - {1})))"
+                .format(self.d, self.r))
+        super().__init__(expr=expr)
+
+    def time_to_beat(self, t):
+        # \int f(t) = \log_r (1-\frac{t(1-r)}{d})
+        return math.log(1 - (t * (1 - self.r) / self.d), self.r)
+
+    def beat_to_time(self, b):
+        # t = \frac{d(1 - r^b)}{1 - r}
+        return self.d * (1 - self.r**b) / (1 - self.r)
+
+    def __str__(self):
+        prefix = super().__str__()
+        description = ("\nInitial duration = {} seconds, acceleration = {}%."
+                       .format(self.d * 60, self.percent))
+        return prefix + description
 
 
 class VariableTempoBPF(VariableTempo):
@@ -523,6 +584,14 @@ def main():
     theme.write('midi', fp='theme.midi')
     transformed_theme.write('midi', fp='transformed_theme.midi')
     canon.write('midi', fp='canon.midi')
+
+    print("\n\n")
+
+    # EXAMPLE 3: Nancarrow geometric acceleration
+    nancarrow = NancarrowGeometricAcceleration(initial_duration=2, percent=5)
+    print(nancarrow)
+    for beat in range(7):
+        print(nancarrow.beat_to_time(beat) * 60)  # 0, 2, 3.905, 5.719, ...
 
 
 if __name__ == "__main__":
