@@ -129,7 +129,7 @@ class ConstantVariableTempo(VariableTempo):
         Create a `VariableTempo` object for a constant tempo of 60 beats per
         minute--f(t) = 60:
 
-            >>> curve = ConstantVariableTempo(start_tempo=60)
+            >>> vtf = ConstantVariableTempo(start_tempo=60)
 
     """
 
@@ -186,7 +186,7 @@ class LinearVariableTempo(_LinearAndExponentialVariableTempos):
         Create a `VariableTempo` object for a linear acceleration from 60 bpm
         to 120 bpm over 0.5 minutes--f(t) = 60 * 2 * t + 60:
 
-            >>> curve = LinearVariableTempo(start_tempo=60, end_tempo=120,
+            >>> vtf = LinearVariableTempo(start_tempo=60, end_tempo=120,
             ...                             length=0.5)
 
     """
@@ -228,7 +228,7 @@ class ExponentialVariableTempo(_LinearAndExponentialVariableTempos):
         Create an `VariableTempo` object for an exponential acceleration from
         60 bpm to 120 bpm over 2 minutes--f(t) = 60 + (120/60)^(t/2):
 
-            >>> curve = ExponentialVariableTempo(start_tempo=60, end_tempo=120,
+            >>> vtf = ExponentialVariableTempo(start_tempo=60, end_tempo=120,
             ...                                  length=2)
 
     """
@@ -278,7 +278,7 @@ class ExpressionVariableTempo(VariableTempo):
         Create a `VariableTempo` object for a tempo of the form
         f(t) = 60t^2 + 60:
 
-            >>> curve = ExpressionVTF(expr='60 * t**2 + 60')
+            >>> vtf = ExpressionVTF(expr='60 * t**2 + 60')
 
     """
 
@@ -351,7 +351,14 @@ class NancarrowGeometricAcceleration(VariableTempo):
 
     Parameters:
         initial_duration (float)
-        ratio (float)
+        percent (float)
+
+    Example:
+        Create a VariableTempo object for a Nancarrow geometric acceleration
+        with an initial duration of 2 seconds and an acceleration of 5%:
+
+            >>> vtf = NancarrowGeometricAcceleration(initial_duration=2,
+            ...                                        percent=5)
 
     """
     def __init__(self, initial_duration, percent):
