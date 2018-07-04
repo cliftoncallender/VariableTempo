@@ -379,11 +379,11 @@ class NancarrowGeometricAcceleration(VariableTempo):
         super().__init__(expr=expr)
 
     def time_to_beat(self, t):
-        # \int f(t) = \log_r (1-\frac{t(1-r)}{d})
+        """ Return $\int f(t) = \log_r (1-\frac{t(1-r)}{d})$."""
         return math.log(1 - (t * (1 - self.r) / self.d), self.r)
 
     def beat_to_time(self, b):
-        # t = \frac{d(1 - r^b)}{1 - r}
+        """Return $t = \frac{d(1 - r^b)}{1 - r}$."""
         return self.d * (1 - self.r**b) / (1 - self.r)
 
     def __str__(self):
@@ -510,31 +510,74 @@ class VariableTempoBPF(VariableTempo):
         return prefix + description
 
 
-def transform_stream(original_stream, tempo_function):
+# Switch to camelCase per music21 convention.
+def variableAugmentAndDiminish(self, tempoFunction, anchorZero=0,
+                               anchorZeroRecurse=0, inPlace=False):
     """Transform a music21 stream by a given tempo function.
 
-    Returns a new (flat) music21 stream that is a (deep)copy of the
-    `original_stream` with offsets and quarterLength durations modified
+    Returns a new music21 stream that is a (deep)copy of the
+    `self` with offsets and quarterLength durations modified
     by `tempo_function`.
 
     `tempo_function` can be either a `VariableTempo` or `VariableTempoBPF`
     object.
 
+    Extend the `augmentOrDiminish` method for the music21 `Stream` class.
+
+    Offsets and duratons are modified by a `tempoFunction` object rather than
+    a fixed scalar.
+
+    Code is adapted from the `scaleOffsets`, `scaleDurations`, and
+    `augmentOrDiminish` methods of the music21 `Stream` class, with
+    `tempoFunction` in lieu of `amountToScale.
     """
-    new_stream = m21.stream.Stream()
-    # Insert MM = 60 so that offsets can be interpreted as seconds.
-    new_stream.append(m21.tempo.MetronomeMark(number=60))
-    for e in original_stream.flat:
-        new_e = copy.deepcopy(e)
-        start = 60 * tempo_function.beat_to_time(e.offset)
-        if e.duration is None:
-            new_e.duration = None
-        else:
-            end = 60 * tempo_function.beat_to_time(e.offset +
-                                                   e.duration.quarterLength)
-            new_e.duration.quarterLength = end - start
-        new_stream.insert(start, new_e)
-    return new_stream
+    if not inPlace:
+        returnObj = copy.deepcopy(self)
+        returnObj.derivation.method = 'transformOffsets'
+        returnObj.setDerivationMethod('transformOffsets', recurse=True)
+    else:
+        returnObj = self
+
+    # Local stream start time
+    anchorZeroTime = tempoFunction.beat_to_time(anchorZero) * 60
+
+    # Transform offsets.
+    for e in returnObj._elements:
+        currentOffset = returnObj.elementOffset(e)
+        startBeat = currentOffset + anchorZero
+        startTime = tempoFunction.beat_to_time(startBeat) * 60
+        # New offset is startTime relative to anchorZeroTime
+        returnObj.setElementOffset(e, startTime - anchorZeroTime)
+        if startBeat > anchorZeroRecurse:
+            anchorZeroRecurse = startBeat
+
+        # Transform durations.
+        if e.duration is not None:
+            if e.duration.quarterLength > 0:
+                endBeat = startBeat + e.duration.quarterLength
+                endTime = (tempoFunction.beat_to_time(endBeat) * 60)
+                newDuration = endTime - startTime
+                amountToScale = newDuration / e.duration.quarterLength
+                e.duration = e.duration.augmentOrDiminish(amountToScale)
+
+        # Recurse through the stream.
+        if e.isStream:
+            e.variableAugmentAndDiminish(tempoFunction,
+                                         anchorZero=anchorZeroRecurse,
+                                         anchorZeroRecurse=anchorZeroRecurse,
+                                         inPlace=True)
+
+    # Let the `Stream` object know that we changed core elements via
+    # `._elements`.
+    returnObj.coreElementsChanged()
+    if not inPlace:
+        return returnObj
+
+
+# Monkey patch to extend functionality of the music21 Stream class to include
+# continuously variable scaling of offsets and durations by a VariableTempo
+# object.
+m21.stream.Stream.variableAugmentAndDiminish = variableAugmentAndDiminish
 
 
 def main():
@@ -572,7 +615,7 @@ def main():
     # theme.show()
 
     # Transform theme by tempo function.
-    transformed_theme = transform_stream(theme, bpf)
+    transformed_theme = theme.variableAugmentAndDiminish(bpf)
     transformed_theme.show('t')
     # transformed_theme.show() creates problems with very small durations:
     # "music21.duration.DurationException: Cannot return types smaller than
