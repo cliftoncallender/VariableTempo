@@ -203,8 +203,8 @@ class LinearVariableTempo(_LinearAndExponentialVariableTempos):
 
         # Set slope and expression.
         self.slope = (self.end_tempo - self.start_tempo) / self.length
-        self.expr = self.expr = "{} * t + {}".format(self.slope,
-                                                     self.start_tempo)
+        self.expr = "{} * t + {}".format(self.slope,
+                                         self.start_tempo)
 
     def time_to_beat(self, t):
         return self.slope * t**2 / 2 + self.start_tempo * t
